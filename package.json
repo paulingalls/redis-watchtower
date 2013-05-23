@@ -1,0 +1,21 @@
+{
+  "name": "redis-watchtower",
+  "description": "A client library for Redis Sentinel",
+  "url": "https://github.com/FutureAdLabs/redis-sentinel",
+  "keywords": [
+    "redis"
+  ],
+  "author": {
+    "name": "Andrew Williams",
+    "email": "andy@futureadlabs.com"
+  },
+  "lib": ".",
+  "main": "./watchtower.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FutureAdLabs/redis-sentinel.git"
+  },
+  "version": "0.0.1",
+  "_id": "M6@0.0.1",
+  "_from": "redis-watchtower"
+}
