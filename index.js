@@ -1,5 +1,4 @@
 var redis = require('redis');
-var client = require('./client');
 
 var Watchtower = function() {
 	var _masterName;
@@ -10,7 +9,6 @@ var Watchtower = function() {
 		host: '',
 		port: 6379
 	};
-	var _clients = [];
 
 	var _connect = function(settings, callback) {
 		if(!settings) settings = _getDefaultSettings();
@@ -62,41 +60,19 @@ var Watchtower = function() {
 	var _handlePrioritySentinelError = function(err) {};
 	var _handlePrioritySentinelEnd = function() {};
 
-	var _handleMasterError = function(err) {
-		console.log('Redis Error: ' + err);
-
-		_master.client.end();
-		_master.client = null;
-	};
-	var _handleMasterEnd = function() {
-		console.log('Master Connection End');
-		_master.client = null;
-	};
-
 	var _subscribeToEvents = function(sentinel) {
 		sentinel.on('message', _eventHandler);
-		sentinel.subscribe('+odown');
 		sentinel.subscribe('+switch-master');
 	};
 
 	var _eventHandler = function(channel, message) {
-		console.log(channel);
-		console.log(message);
-
-		if(channel === '+odown') {
-			console.log('MST3R iZ DOWN!!!1');
-		}
-
 		if(channel === '+switch-master') {
-			console.log('OMG!!! NEW MST3R5!!! MusT HANDLE!!!1');
-
 			var data = message.split(' ');
 			if(data) {
 				var length = data.length;
 				if(length > 1) {
 					_master.host = data[length - 2];
 					_master.port = data[length - 1];
-					console.log(_master);
 				}
 			}
 		}
@@ -113,23 +89,15 @@ var Watchtower = function() {
 		})
 	};
 
-	var _createClient = function() {
-		console.log('Creating client...');
-		console.log(_master);
-		var c = new client(_master.host, _master.port, null, _onClientQuit);
-		_clients.push(c);
+	var _createClient = function(opts) {
+		var c = redis.createClient(_master.port, _master.host, opts);
+
 		return c;
 	};
 
-	var _onClientQuit = function(client) {
-		console.log('Client Quit');
-		var index = _clients.indexOf(client);
-		_clients.splice(index, 1);
-	};
-
 	return {
-		Connect: _connect,
-		CreateClient: _createClient
+		connect: _connect,
+		createClient: _createClient
 	};
 }();
 
