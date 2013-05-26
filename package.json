@@ -15,7 +15,10 @@
     "type": "git",
     "url": "https://github.com/FutureAdLabs/redis-sentinel.git"
   },
-  "version": "0.0.1",
-  "_id": "M6@0.0.1",
+  "dependencies": {
+    "redis" : "0.8.*"
+  },
+  "version": "0.0.2",
+  "_id": "redis-watchtower@0.0.2",
   "_from": "redis-watchtower"
 }

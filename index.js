@@ -11,9 +11,8 @@ var Watchtower = function() {
 	};
 	var _masterDownCallbacks = [];
 	var _masterUpCallbacks = [];
+	var _failoverTriggeredCallbacks = [];
 	var _masterSwitchCallbacks = [];
-	var _masterDown = false;
-	var _clients = [];
 
 	var _connect = function(settings, callback) {
 		if(!settings) settings = _getDefaultSettings();
@@ -37,17 +36,16 @@ var Watchtower = function() {
 	};
 
 	var _createClient = function(opts) {
-		if(_masterDown) {
-			console.log('MASTER DOWN');
-			return;
-		}
-
-		console.log('MASTER UP');
-
-		console.log('Getting client: ' + JSON.stringify(_master, null, 2));
 		var c = redis.createClient(_master.port, _master.host, opts);
 
-		_clients.push(c);
+		if(!c) return;
+
+		c.newMaster = function(message, newMasterHost, newMasterPort) {
+			c.host = newMasterHost;
+			c.port = newMasterPort;
+		};
+
+		_onMasterSwitch(c.newMaster);
 
 		return c;
 	};
@@ -59,6 +57,10 @@ var Watchtower = function() {
 	var _onMasterUp = function(callback) {
 		_masterUpCallbacks.push(callback);
 	}
+
+	var _onFailoverTriggered = function(callback) {
+		_failoverTriggeredCallbacks.push(callback);
+	};
 
 	var _onMasterSwitch = function(callback) {
 		_masterSwitchCallbacks.push(callback);
@@ -89,35 +91,39 @@ var Watchtower = function() {
 		return client;
 	};
 
+	//TODO:- Try to reconnect to Sentinel
 	var _handlePrioritySentinelError = function(err) {};
 	var _handlePrioritySentinelEnd = function() {};
 
 	var _subscribeToEvents = function(sentinel) {
 		sentinel.on('message', _eventHandler);
-		//sentinel.subscribe('+failover-triggered');
+		sentinel.subscribe('+failover-triggered');
 		sentinel.subscribe('+switch-master');
 		sentinel.subscribe('+odown');
 		sentinel.subscribe('-odown');
 	};
 
 	var _eventHandler = function(channel, message) {
-		console.log('SENTINEL EVENT: channel: ' + channel + ' message: ' + message);
 		var data = message.split(' ');
 
 		if(data[0] === 'master') {
 			if(channel === '+odown') {
-				_masterDown = true;
 				_masterDownCallbacks.forEach(function(callback) {
 					if(typeof(callback) == "function") callback();
 				});
 			}
 
 			if(channel === '-odown') {
-				_masterDown = false;
 				_masterUpCallbacks.forEach(function(callback) {
 					if(typeof(callback) == "function") callback();
 				});
 			}
+		}
+
+		if(channel === '+failover-triggered') {
+			_failoverTriggeredCallbacks.forEach(function(callback) {
+				if(typeof(callback) == "function") callback(message);
+			});
 		}
 
 		if(channel === '+switch-master') {
@@ -127,25 +133,15 @@ var Watchtower = function() {
 				if(length > 1) {
 					_master.host = data[length - 2];
 					_master.port = data[length - 1];
-					_masterDown = false;
 				}
 			}
 
-			console.log('New Master: ' + JSON.stringify(_master, null, 2));
-
 			_masterSwitchCallbacks.forEach(function(callback) {
-				if(typeof(callback) == "function") callback(message);
+				if(typeof(callback) == "function") callback(message, _master.host, _master.port);
 			});
 
 			_masterUpCallbacks.forEach(function(callback) {
 				if(typeof(callback) == "function") callback();
-			});
-
-			_clients.forEach(function(client) {
-				if(!client) return;
-
-				client.port = _master.port;
-				client.host = _master.host;
 			});
 		}
 	};

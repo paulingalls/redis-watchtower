@@ -44,3 +44,5 @@ client.get('key1', function(err, data) {
 	client.quit();
 });
 ```
+
+Client objects are standard Redis clients, with the added benefit that if the master server is replaced, the client is updated as required.
