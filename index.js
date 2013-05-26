@@ -9,6 +9,9 @@ var Watchtower = function() {
 		host: '',
 		port: 6379
 	};
+	var _masterSwitchCallbacks = [];
+	var _masterDown = false;
+	var _clients = [];
 
 	var _connect = function(settings, callback) {
 		if(!settings) settings = _getDefaultSettings();
@@ -30,7 +33,28 @@ var Watchtower = function() {
 			_loadMaster(_prioritySentinelClient, callback);
 		}
 	};
-	
+
+	var _createClient = function(opts) {
+		if(_masterDown) {
+			console.log('MASTER DOWN');
+			return;
+		}
+
+		console.log('MASTER UP');
+
+		console.log('Getting client: ' + JSON.stringify(_master, null, 2));
+		var c = redis.createClient(_master.port, _master.host, opts);
+
+		_clients.push(c);
+		//console.log(JSON.stringify(c, null, 2));
+		//console.log(c.options);
+
+		return c;
+	};
+
+	var _onMasterSwitch = function(callback) {
+		_masterSwitchCallbacks.push(callback);
+	};
 
 	var _getDefaultSettings = function() {
 		return {
@@ -62,19 +86,71 @@ var Watchtower = function() {
 
 	var _subscribeToEvents = function(sentinel) {
 		sentinel.on('message', _eventHandler);
+		sentinel.subscribe('+failover-triggered');
 		sentinel.subscribe('+switch-master');
+		sentinel.subscribe('+sdown');
+		sentinel.subscribe('-sdown');
+		sentinel.subscribe('+odown');
+		sentinel.subscribe('-odown');
 	};
 
 	var _eventHandler = function(channel, message) {
+		console.log('SENTINEL EVENT: channel: ' + channel + ' message: ' + message);
+		var data = message.split(' ');
+
+		if(data[0] === 'master') {
+			if(channel === '+sdown') {
+				_masterDown = true;
+			}
+
+			if(channel === '+odown') {
+				_masterDown = true;
+			}
+
+			if(channel === '-sdown') {
+				_masterDown = false;
+			}
+
+			if(channel === '-odown') {
+				_masterDown = false;
+			}
+		}
+
+		if(channel === '+failover-triggered') {
+			var remove = [];
+			for(var i = 0, length = _clients.length; i < length; i++) {
+				if(_clients[i].port === data[data.length - 1] && _clients[i].host === data[data.length - 2]) {
+					remove.push(i);
+				}
+			}
+
+			console.log('to remove:');
+			console.log(remove);
+
+			for(var i = 0, length = remove.length; i < length; i++) {
+				_clients[i].punsubscribe('*');
+				_clients[i].quit();
+				_clients[i] = null;
+				//_clients.splice(i, 1);
+			}
+		}
+
 		if(channel === '+switch-master') {
-			var data = message.split(' ');
+			
 			if(data) {
 				var length = data.length;
 				if(length > 1) {
 					_master.host = data[length - 2];
 					_master.port = data[length - 1];
+					_masterDown = false;
 				}
 			}
+
+			console.log('New Master: ' + JSON.stringify(_master, null, 2));
+
+			_masterSwitchCallbacks.forEach(function(callback) {
+				if(typeof(callback) == "function") callback(message);
+			});
 		}
 	};
 
@@ -89,15 +165,10 @@ var Watchtower = function() {
 		})
 	};
 
-	var _createClient = function(opts) {
-		var c = redis.createClient(_master.port, _master.host, opts);
-
-		return c;
-	};
-
 	return {
 		connect: _connect,
-		createClient: _createClient
+		createClient: _createClient,
+		onMasterSwitch: _onMasterSwitch
 	};
 }();
 
