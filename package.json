@@ -1,7 +1,7 @@
 {
   "name": "redis-watchtower",
   "description": "A client library for Redis Sentinel",
-  "url": "https://github.com/FutureAdLabs/redis-sentinel",
+  "url": "https://github.com/FutureAdLabs/redis-watchtower",
   "keywords": [
     "redis",
     "redis-sentinel"
@@ -19,7 +19,7 @@
   "dependencies": {
     "redis" : "0.8.*"
   },
-  "version": "0.0.3",
-  "_id": "redis-watchtower@0.0.3",
+  "version": "0.0.4",
+  "_id": "redis-watchtower@0.0.4",
   "_from": "redis-watchtower"
 }
