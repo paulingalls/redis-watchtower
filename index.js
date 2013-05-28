@@ -40,12 +40,10 @@ var Watchtower = function() {
 
 		if(!c) return;
 
-		c.newMaster = function(message, newMasterHost, newMasterPort) {
+		_onMasterSwitch(function(message, newMasterHost, newMasterPort) {
 			c.host = newMasterHost;
 			c.port = newMasterPort;
-		};
-
-		_onMasterSwitch(c.newMaster);
+		});
 
 		return c;
 	};
