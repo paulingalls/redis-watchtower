@@ -13,6 +13,7 @@ var Watchtower = function() {
 	var _masterUpCallbacks = [];
 	var _failoverTriggeredCallbacks = [];
 	var _masterSwitchCallbacks = [];
+	var _sentinelReconnectInProgress = false;
 
 	var _connect = function(settings, callback) {
 		if(!settings) settings = _getDefaultSettings();
@@ -21,18 +22,32 @@ var Watchtower = function() {
 		_masterName = settings.masterName;
 		_sentinels = settings.sentinels;
 
-		_prioritySentinelClient = _getSentinelClient();
-		if(_prioritySentinelClient === null) {
-			callback({
-				message: 'Unable to connect to Redis Sentinel'
-			});
-		} else {
-			_prioritySentinelSubscriptionClient = _getSentinelClient();
+		_setupSentinels(callback);
+	};
+
+	var _setupSentinels = function(callback) {
+		_getSentinelClient(function(sentinelClient) {
+			if(!sentinelClient) {
+				callback({
+					message: 'Unable to connect to Redis Sentinel'
+				});
+				return;
+			}
+
+			_prioritySentinelClient = sentinelClient;
 			_prioritySentinelClient.on('error', _handlePrioritySentinelError);
 			_prioritySentinelClient.on('end', _handlePrioritySentinelEnd);
-			_subscribeToEvents(_prioritySentinelSubscriptionClient);
-			_loadMaster(_prioritySentinelClient, callback);
-		}
+
+			_getSentinelClient(function(sentinelSubscriptionClient) {
+				if(sentinelSubscriptionClient) {
+					_prioritySentinelSubscriptionClient = sentinelSubscriptionClient;
+					_prioritySentinelSubscriptionClient.on('error', function() {});
+
+					_subscribeToEvents(_prioritySentinelSubscriptionClient);
+					_loadMaster(_prioritySentinelClient, callback);
+				}
+			});
+		});
 	};
 
 	var _createClient = function(opts) {
@@ -78,19 +93,40 @@ var Watchtower = function() {
 		}];
 	};
 
-	var _getSentinelClient = function() {
-		var client;
+	var _getSentinelClient = function(callback, sentinelIndex) {
+		if(!sentinelIndex) sentinelIndex = 0;
+		
+		client = redis.createClient(_sentinels[sentinelIndex].port, _sentinels[sentinelIndex].host);
+		client.on('ready', function() {callback(client);});
+		client.on('error', function() {
+			client.end();
 
-		for(var i = 0, length = _sentinels.length; i < length; i++) {
-			client = redis.createClient(_sentinels[i].port, _sentinels[i].host);
-			if(client) return client;
-		}
-
-		return client;
+			if(sentinelIndex + 1 < _sentinels.length) {
+				_getSentinelClient(callback, sentinelIndex + 1);
+			} else {
+				callback(null);
+			}
+		});
 	};
 
-	//TODO:- Try to reconnect to Sentinel
-	var _handlePrioritySentinelError = function(err) {};
+	var _handlePrioritySentinelError = function(err) {
+		if(_sentinelReconnectInProgress) return;
+		_sentinelReconnectInProgress = true;
+
+		if(_prioritySentinelSubscriptionClient) {
+			_prioritySentinelSubscriptionClient.end();
+			_prioritySentinelSubscriptionClient = null;
+		}
+		if(_prioritySentinelClient) {
+			_prioritySentinelClient.end();
+			_prioritySentinelClient = null;
+		}
+
+		_setupSentinels(function() {
+			_sentinelReconnectInProgress = false;
+		});
+	};
+
 	var _handlePrioritySentinelEnd = function() {};
 
 	var _subscribeToEvents = function(sentinel) {
