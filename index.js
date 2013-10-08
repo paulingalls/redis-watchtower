@@ -53,7 +53,7 @@ var Watchtower = function() {
 	var _createClient = function(opts) {
 		var c = redis.createClient(_master.port, _master.host, opts);
 
-		if(!c) return;
+		if(!c) return null;
 
 		_onMasterSwitch(function(message, newMasterHost, newMasterPort) {
 			c.host = newMasterHost;
@@ -69,7 +69,7 @@ var Watchtower = function() {
 
 	var _onMasterUp = function(callback) {
 		_masterUpCallbacks.push(callback);
-	}
+	};
 
 	var _onFailoverTriggered = function(callback) {
 		_failoverTriggeredCallbacks.push(callback);
@@ -182,7 +182,7 @@ var Watchtower = function() {
 
 	//TODO:- This should try the priority sentinel, but then check other sentinels if the priority doesn't work
 	var _loadMaster = function(sentinel, callback) {
-		sentinel.sentinel('get-master-addr-by-name', _masterName, function(err, data) {
+    sentinel.send_command("SENTINEL", ["get-master-addr-by-name", _masterName], function(err, data) {
 			if(data && data.length > 1) {
 				_master.host = data[0];
 				_master.port = data[1];
