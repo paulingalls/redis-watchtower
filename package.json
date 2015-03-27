@@ -17,7 +17,7 @@
     "url": "https://github.com/FutureAdLabs/redis-watchtower.git"
   },
   "dependencies": {
-    "redis" : "0.8.*"
+    "redis" : "0.12.1"
   },
   "version": "0.0.5",
   "_id": "redis-watchtower@0.0.5",
